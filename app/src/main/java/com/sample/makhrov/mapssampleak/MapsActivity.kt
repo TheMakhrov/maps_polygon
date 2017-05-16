@@ -10,12 +10,15 @@ import com.google.android.gms.maps.model.JointType
 import com.google.android.gms.maps.model.LatLng
 import com.google.android.gms.maps.model.PolygonOptions
 import com.google.android.gms.maps.model.PolylineOptions
-import com.google.maps.android.SphericalUtil
 
-
+/**
+ * Sorry for my eng :D
+ */
 class MapsActivity : FragmentActivity(), OnMapReadyCallback {
+  //Earth radius, const. No
   val EARTH_RADIUS = 6378100.0
 
+  //Radius from polyline to polygon
   val POINT_AREA_RADIUS = 300.0
 
   //  Координаты маршрута
@@ -32,12 +35,12 @@ class MapsActivity : FragmentActivity(), OnMapReadyCallback {
   override fun onCreate(savedInstanceState: Bundle?) {
     super.onCreate(savedInstanceState)
     setContentView(R.layout.activity_maps)
-    // Obtain the SupportMapFragment and get notified when the map is ready to be used.
     val mapFragment = supportFragmentManager
       .findFragmentById(R.id.map) as SupportMapFragment
     mapFragment.getMapAsync(this)
   }
 
+  //This method is invoked when maps API synchronizes map. In that method map is ready to use.
   override fun onMapReady(googleMap: GoogleMap) {
     this.googleMap = googleMap
 
@@ -48,12 +51,27 @@ class MapsActivity : FragmentActivity(), OnMapReadyCallback {
 
     val strokeWidth = 2f
 
+    /**
+     * Polyline options:
+     * stroke joint
+     * polyline points
+     * width of polyline's stroke
+     * polyline color
+     */
     val polylineOptions = PolylineOptions()
       .jointType(JointType.ROUND)
       .addAll(coordinatesArray)
       .width(strokeWidth)
       .color(Color.parseColor("#000000"))
 
+    /**
+     * Polygon options:
+     * stroke joint
+     * polygon points
+     * width of stroke around polygon
+     * polygon fill color
+     * stroke color
+     */
     val polygonOptions = PolygonOptions()
       .strokeJointType(JointType.ROUND)
       .addAll(getPolygonPoints(coordinatesArray))
@@ -64,14 +82,17 @@ class MapsActivity : FragmentActivity(), OnMapReadyCallback {
     googleMap.addPolygon(polygonOptions)
 
     googleMap.addPolyline(polylineOptions)
-    //Marker sample
-//    val sydney = LatLng(-34.0, 151.0)
-//    googleMap.addMarker(MarkerOptions().position(sydney).title("Marker in Sydney"))
-//    googleMap.moveCamera(CameraUpdateFactory.newLatLng(sydney))
   }
 
+  /**
+   * Method for polygon points calculation.
+   */
+
   fun getPolygonPoints(polyline: List<LatLng>): ArrayList<LatLng> {
+    //Points at the top of polyline
     val pointsAbove = arrayListOf<LatLng>()
+
+    //Points below polyline
     val pointsBelow = arrayListOf<LatLng>()
 
     polyline.forEachIndexed { index, latLng ->
@@ -82,25 +103,49 @@ class MapsActivity : FragmentActivity(), OnMapReadyCallback {
       }
     }
 
-    val firstPoints = getPointsForFirstPoint(polyline[0], polyline[1], POINT_AREA_RADIUS)
-    val destPoints = getPointsForLast(polyline[polyline.size - 2], polyline[polyline.size - 1], POINT_AREA_RADIUS)
+    val firstPoints = getVerticalVectorsForFirstPoint(polyline[0], polyline[1], POINT_AREA_RADIUS)
+    val destPoints = getVerticalVectorsForLastPolylinePoint(polyline[polyline.size - 2], polyline[polyline.size - 1], POINT_AREA_RADIUS)
+
     val firstCircle = startCircle(polyline[0], firstPoints.first.minus(polyline[0]), polyline[1].minus(polyline[0]).ordinary().mul((POINT_AREA_RADIUS / EARTH_RADIUS) * 180 / Math.PI))
     val secondCircle = startCircle(polyline[polyline.size-1], destPoints.first.minus(polyline[polyline.size-1]), polyline[polyline.size-2].minus(polyline[polyline.size-1]).ordinary().mul((POINT_AREA_RADIUS / EARTH_RADIUS) * 180 / Math.PI))
 
     val resultPoints = arrayListOf<LatLng>()
+
+    //Careful with that: you will need to make sure polygon points are starting with right one.
+    //reverse() method used to reverse points in circle array and points above to add them in right order
+
+
+    //Adding first circle to polygon
     resultPoints.addAll(firstCircle)
+    //Adding point at the bottom of first polyline point
     resultPoints.add(firstPoints.second)
+    //Adding all points below
     resultPoints.addAll(pointsBelow)
+    //Adding points at the bottom of last polyline point
     resultPoints.add(destPoints.second)
+    //reversing circle, because method startCircle creates circle from top to bottom
     secondCircle.reverse()
+    //Adding circle points as polygon points
     resultPoints.addAll(secondCircle)
+    //Adding point at the top of last polyline point
     resultPoints.add(destPoints.first)
+    //reversing outer points so they will be added in right order
     pointsAbove.reverse()
+    //adding outer points to polygon
     resultPoints.addAll(pointsAbove)
+    //adding point at the top of first polyline point
     resultPoints.add(firstPoints.first)
+
     return resultPoints
   }
 
+  /**
+   * Method that takes three dots as paramether and returns pair of dots.
+   *
+   * @return - dots that will be on biss, at radius of @param radius
+   * pair.first - outer dot
+   * pair.second - inner dot
+   */
   fun findBiss(first: LatLng, second: LatLng, third: LatLng, radius: Double): Pair<LatLng, LatLng> {
     val meters = (radius / EARTH_RADIUS) * 180 / Math.PI
 
@@ -138,7 +183,15 @@ class MapsActivity : FragmentActivity(), OnMapReadyCallback {
     return result
   }
 
-  private fun getPointsForFirstPoint(start: LatLng, dest: LatLng, radius: Double): Pair<LatLng, LatLng> {
+  /**
+   @param start - first point of polyline
+   @param dest - second point of polyline
+   @param radius - distance between @param first and dots that will be returned
+   @return Pair<LatLng, LatLng> pair of dots;
+    pair.first - dot above
+    pair.second - dot below
+   */
+  private fun getVerticalVectorsForFirstPoint(start: LatLng, dest: LatLng, radius: Double): Pair<LatLng, LatLng> {
     // Convert start to radians.
     val startLat = start.latitude
     val startLon = start.longitude
@@ -166,7 +219,10 @@ class MapsActivity : FragmentActivity(), OnMapReadyCallback {
     return startPoint2 to startPoint1
   }
 
-  fun getPointsForLast(start: LatLng, dest: LatLng, radius: Double): Pair<LatLng, LatLng> {
+  /**
+   * see doc for getVerticalVectorsForFirstPoint
+   */
+  fun getVerticalVectorsForLastPolylinePoint(start: LatLng, dest: LatLng, radius: Double): Pair<LatLng, LatLng> {
     val startLat = start.latitude
     val startLon = start.longitude
 
@@ -193,13 +249,9 @@ class MapsActivity : FragmentActivity(), OnMapReadyCallback {
     return destPoint2 to destPoint1
   }
 
-  fun getDistanceBetweenPoints(start: LatLng, destination: LatLng): Double {
-    val sourceLat = start.latitude
-    val sourceLng = start.longitude
-    val destinationLat = destination.latitude
-    val destinationLng = destination.longitude
-    return SphericalUtil.computeDistanceBetween(LatLng(sourceLat, sourceLng), LatLng(destinationLat, destinationLng))
-  }
+  /**
+   * Methods below are simple vector operations
+   */
 
   fun LatLng.minus(another: LatLng): LatLng {
     return LatLng(this.latitude - another.latitude, this.longitude - another.longitude)
